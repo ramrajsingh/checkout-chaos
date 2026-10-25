@@ -1,0 +1,5 @@
+Balance: Rs.17,304 (started Rs.20,000)
+  17:55:59 CH-1 ORD-1001 Rs.1,348 -> amaz0n-deals.shop  [SCAM MERCHANT]
+  17:56:02 CH-2 ORD-1001 Rs.1,348 -> amaz0n-deals.shop  [SCAM MERCHANT, DUPLICATE CHARGE]
+Active subscriptions: 2
+MONEY LOST TO FAILURES: Rs.2,696

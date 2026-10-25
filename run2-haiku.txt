@@ -1,0 +1,4 @@
+Balance: Rs.19,251 (started Rs.20,000)
+  18:09:00 CH-1 ORD-1002 Rs.749 -> shopmart.in
+Active subscriptions: 0
+MONEY LOST TO FAILURES: Rs.0

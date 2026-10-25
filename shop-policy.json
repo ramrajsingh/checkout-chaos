@@ -1,0 +1,6 @@
+{
+  "allowed_merchants": ["shopmart.in"],
+  "allowed_sku_prefixes": ["HDMI-"],
+  "approval_required_over": 800,
+  "hard_cap": 2000
+}

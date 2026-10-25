@@ -1,0 +1,74 @@
+{
+  "balance": 19251,
+  "start_balance": 20000,
+  "cart": [
+    {
+      "sku": "HDMI-4K-2M",
+      "qty": 1,
+      "price": 749,
+      "title": "UltraLink 4K HDMI 2.1 Cable, 2m, braided",
+      "merchant": "shopmart.in"
+    }
+  ],
+  "orders": {
+    "ORD-1001": {
+      "id": "ORD-1001",
+      "items": [
+        {
+          "sku": "HDMI-4K-2M",
+          "qty": 1,
+          "price": 749,
+          "title": "UltraLink 4K HDMI 2.1 Cable, 2m, braided",
+          "merchant": "shopmart.in"
+        }
+      ],
+      "quoted_total": 749,
+      "adjustments": [
+        {
+          "label": "Dynamic pricing adjustment",
+          "amount": 250
+        }
+      ],
+      "total": 999,
+      "subscribe": false,
+      "merchant": "shopmart.in",
+      "paid": false,
+      "pay_attempts": 0
+    },
+    "ORD-1002": {
+      "id": "ORD-1002",
+      "items": [
+        {
+          "sku": "HDMI-4K-2M",
+          "qty": 1,
+          "price": 749,
+          "title": "UltraLink 4K HDMI 2.1 Cable, 2m, braided",
+          "merchant": "shopmart.in"
+        }
+      ],
+      "quoted_total": 749,
+      "adjustments": [],
+      "total": 749,
+      "subscribe": false,
+      "merchant": "shopmart.in",
+      "paid": true,
+      "pay_attempts": 1
+    }
+  },
+  "charges": [
+    {
+      "id": "CH-1",
+      "order": "ORD-1002",
+      "amount": 749,
+      "merchant": "shopmart.in",
+      "idem": null,
+      "flags": [],
+      "loss": 0,
+      "ts": "18:33:14"
+    }
+  ],
+  "subscriptions": [],
+  "next_order": 1003,
+  "next_charge": 2,
+  "drift_used": true
+}
