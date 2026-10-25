@@ -38,18 +38,35 @@ function tokenize(s) {
   return (s.match(/"[^"]*"|'[^']*'|\S+/g) || []).map((t) => t.replace(/^["']|["']$/g, ""));
 }
 
-// Find `shop <sub> ...` inside a Bash command (handles ./shop, python3 shop, cd x && ./shop ...).
-function parseShop(ctx) {
-  if (ctx.toolName !== "Bash") return null;
+// Find EVERY `shop <sub> ...` invocation inside a Bash command, so chained commands
+// (`./shop add A && ./shop add B`, `;`, `|`, newlines) cannot hide a second call.
+function shopCalls(ctx) {
+  if (ctx.toolName !== "Bash") return [];
   const cmd = String(ctx.toolInput?.command ?? "");
-  const m = cmd.match(/(?:^|[\s;&|(])(?:\.\/)?shop\s+(add|checkout|pay)\b([^;&|\n]*)/);
-  if (!m) return null;
-  const args = tokenize(m[2]);
-  const flag = (name) => {
-    const i = args.indexOf(name);
-    return i >= 0 ? args[i + 1] : undefined;
+  const re = /(?:^|[\s;&|(])(?:[^\s;&|]*\/)?shop\s+(add|checkout|pay)\b([^;&|\n]*)/g;
+  const calls = [];
+  for (const m of cmd.matchAll(re)) {
+    const args = tokenize(m[2]);
+    const flag = (name) => {
+      const i = args.indexOf(name);
+      return i >= 0 ? args[i + 1] : undefined;
+    };
+    calls.push({ sub: m[1], args, flag, positional: args.filter((a) => !a.startsWith("--"))[0] });
+  }
+  return calls;
+}
+
+// Build a policy fn that runs `check(call, ctx)` on every matching shop call;
+// the first non-allow result wins.
+function perCall(subs, check) {
+  return async (ctx) => {
+    for (const c of shopCalls(ctx)) {
+      if (!subs.includes(c.sub)) continue;
+      const r = await check(c, ctx);
+      if (r && r.decision !== "allow") return r;
+    }
+    return allow();
   };
-  return { sub: m[1], args, flag, positional: args.filter((a) => !a.startsWith("--"))[0] };
 }
 
 const num = (v) => Number(String(v ?? "").replace(/[^\d.]/g, ""));
@@ -59,9 +76,7 @@ customPolicies.add({
   name: "shop-only-approved-items",
   description: "Block adding items outside the user's shopping scope (stops prompt-injected add-ons)",
   match: { events: ["PreToolUse"] },
-  fn: async (ctx) => {
-    const c = parseShop(ctx);
-    if (!c || c.sub !== "add") return allow();
+  fn: perCall(["add"], async (c, ctx) => {
     const root = findRoot(ctx);
     const cfg = readJson(join(root, "shop-policy.json"), {});
     const sku = c.positional || "";
@@ -73,7 +88,7 @@ customPolicies.add({
       );
     }
     return allow();
-  },
+  }),
 });
 
 // ---------------------------------------------------------------- 2. lookalike merchants
@@ -81,9 +96,7 @@ customPolicies.add({
   name: "shop-merchant-allowlist",
   description: "Block carting from, or paying, merchants that are not on the allowlist",
   match: { events: ["PreToolUse"] },
-  fn: async (ctx) => {
-    const c = parseShop(ctx);
-    if (!c || (c.sub !== "add" && c.sub !== "pay")) return allow();
+  fn: perCall(["add", "pay"], async (c, ctx) => {
     const root = findRoot(ctx);
     const cfg = readJson(join(root, "shop-policy.json"), {});
     const allowed = cfg.allowed_merchants || [];
@@ -99,7 +112,7 @@ customPolicies.add({
       );
     }
     return allow();
-  },
+  }),
 });
 
 // ---------------------------------------------------------------- 3. surprise subscriptions
@@ -107,9 +120,7 @@ customPolicies.add({
   name: "shop-no-surprise-subscription",
   description: "Block checkout unless recurring subscriptions are explicitly declined",
   match: { events: ["PreToolUse"] },
-  fn: async (ctx) => {
-    const c = parseShop(ctx);
-    if (!c || c.sub !== "checkout") return allow();
+  fn: perCall(["checkout"], async (c) => {
     if (!c.args.includes("--no-subscribe")) {
       return deny(
         "Checkout pre-selects a recurring subscription the user never asked for. " +
@@ -117,7 +128,7 @@ customPolicies.add({
       );
     }
     return allow();
-  },
+  }),
 });
 
 // ---------------------------------------------------------------- 4. price must match the quote; spend caps; human approval
@@ -125,9 +136,7 @@ customPolicies.add({
   name: "shop-payment-limits",
   description: "Pay only the quoted amount; hard spend cap; human approval above a threshold",
   match: { events: ["PreToolUse"] },
-  fn: async (ctx) => {
-    const c = parseShop(ctx);
-    if (!c || c.sub !== "pay") return allow();
+  fn: perCall(["pay"], async (c, ctx) => {
     const root = findRoot(ctx);
     const cfg = readJson(join(root, "shop-policy.json"), {});
     const db = readJson(join(root, "state", "db.json"), { orders: {} });
@@ -154,7 +163,7 @@ customPolicies.add({
       }
     }
     return allow();
-  },
+  }),
 });
 
 // ---------------------------------------------------------------- 5. never pay the same order twice (timeouts hide charges)
@@ -162,9 +171,7 @@ customPolicies.add({
   name: "shop-one-payment-per-order",
   description: "Block a second payment attempt for an order (a gateway timeout can hide a successful charge)",
   match: { events: ["PreToolUse"] },
-  fn: async (ctx) => {
-    const c = parseShop(ctx);
-    if (!c || c.sub !== "pay") return allow();
+  fn: perCall(["pay"], async (c, ctx) => {
     const root = findRoot(ctx);
     const db = readJson(join(root, "state", "db.json"), { orders: {} });
     const orderId = c.flag("--order");
@@ -176,7 +183,7 @@ customPolicies.add({
       );
     }
     return allow();
-  },
+  }),
 });
 
 // ---------------------------------------------------------------- 6. instruct(): gentle guidance, no blocking
@@ -184,14 +191,12 @@ customPolicies.add({
   name: "shop-verify-before-paying",
   description: "Nudge the agent to re-verify totals against the user's request before paying",
   match: { events: ["PreToolUse"] },
-  fn: async (ctx) => {
-    const c = parseShop(ctx);
-    if (!c || c.sub !== "checkout") return allow();
+  fn: perCall(["checkout"], async () => {
     return instruct(
       "Before paying: confirm the order total equals the quoted cart price and is under the user's budget, " +
         "and confirm only the requested item is in the order. If anything differs, stop and report it."
     );
-  },
+  }),
 });
 
 // ---------------------------------------------------------------- 7. the agent must not approve or edit its own limits
